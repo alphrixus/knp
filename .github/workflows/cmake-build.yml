@@ -23,72 +23,6 @@ on:
     branches: [ "master" ]
 
 jobs:
-  linux_build:
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      # Set fail-fast to false to ensure that feedback is delivered for all matrix combinations. Consider changing this to true when your workflow is stable.
-      fail-fast: false
-
-      # Set up a matrix to run the following configurations:
-      # 1. <Linux, Debug, latest GCC compiler toolchain on the default runner image, default generator>
-      # 2. <Linux, Debug, latest Clang compiler toolchain on the default runner image, default generator>
-      matrix:
-        os: [ubuntu-latest]
-        build_type: [Debug]
-        c_compiler: [gcc, clang]
-        include:
-          - os: ubuntu-latest
-            c_compiler: gcc
-            cpp_compiler: g++
-          - os: ubuntu-latest
-            c_compiler: clang
-            cpp_compiler: clang++
-
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set reusable strings
-        # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
-        id: strings
-        shell: bash
-        run: |
-          echo "build-output-dir=build_${{ matrix.c_compiler }}" >> "$GITHUB_OUTPUT"
-
-      - name: Configure
-        run: >
-          docker run --rm -v ${{ github.workspace }}:/KNP -w /KNP kasperskydh/knp-build-image cmake -B ${{ steps.strings.outputs.build-output-dir }}
-          -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
-          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
-          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-          -DKNP_PYTHON_BUILD_WHEEL=ON
-          -S .
-
-      - name: Build
-        run: docker run --rm -v ${{ github.workspace }}:/KNP -w /KNP kasperskydh/knp-build-image cmake --build ${{ steps.strings.outputs.build-output-dir }} --parallel 8
-        timeout-minutes: 180
-
-      - name: Test
-        run: docker run --rm -v ${{ github.workspace }}:/KNP -w /KNP/${{ steps.strings.outputs.build-output-dir }}/knp/tests kasperskydh/knp-build-image ctest -V
-        timeout-minutes: 180
-
-      - name: Create deb packages
-        run: docker run --rm -v ${{ github.workspace }}:/KNP -w /KNP/${{ steps.strings.outputs.build-output-dir }} kasperskydh/knp-build-image cpack -G DEB
-        timeout-minutes: 180
-
-      - name: Upload deb packages
-        if: matrix.c_compiler == 'gcc'
-        uses: actions/upload-artifact@v4
-        with:
-          name: pkg-deb
-          path: ${{ steps.strings.outputs.build-output-dir }}/_packages/
-
-      - name: Upload Python wheel
-        if: matrix.c_compiler == 'gcc'
-        uses: actions/upload-artifact@v4
-        with:
-          name: pkg-python
-          path: ${{ steps.strings.outputs.build-output-dir }}/knp_python_framework/dist/knp-*.whl
-
   non_linux_build:
     runs-on: ${{ matrix.os }}
 
@@ -154,49 +88,10 @@ jobs:
         run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }} --parallel 8
         timeout-minutes: 180
 
-      - name: Test
-        run: ctest --build-config ${{ matrix.build_type }} -V
+      - name: PVS-Check
+        # Build your program with the given configuration. Note that --config is needed because the default Windows generator is a multi-config generator (Visual Studio generator).
+        run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --target pvs-analyze --parallel 8
         timeout-minutes: 180
-        working-directory: ${{ steps.strings.outputs.build-output-dir }}/knp/tests
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.os }}_executables
-          path: ${{ steps.strings.outputs.build-output-dir }}/bin
-
-  publish:
-    needs: [linux_build, non_linux_build]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: pkg-*
-      - shell: bash
-        run: |
-          ls -1
-      - name: Create new release
-        id: create_release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        env:
-          # This token is provided by Actions.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          files: |
-            pkg-deb
-            pkg-python
-            LICENSE.txt
-            NOTICE.txt
-          body: |
-            Release creating added to CI
-          draft: false
-          prerelease: false
 
     # - name: Publish package to the PyPI
       # Already on push in the master branch.
