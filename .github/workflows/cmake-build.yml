@@ -86,7 +86,7 @@ jobs:
           PVS_KEY: ${{ secrets.PVS_STUDIO_KEY }}
         shell: pwsh
         run: |
-          Start-Process -FilePath "${{ matrix.config.analyzer_path }}" -NoNewWindow -Wait -ArgumentList "credentials", "$env:PVS_NAME", "$env:PVS_KEY"
+          Start-Process -FilePath "${{ matrix.analyzer_path }}" -NoNewWindow -Wait -ArgumentList "credentials", "$env:PVS_NAME", "$env:PVS_KEY"
 
       - name: Configure CMake
         env:
