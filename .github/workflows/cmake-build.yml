@@ -49,6 +49,7 @@ jobs:
             boost_install_dir: C:/
             boost_platform_version: 2022
             boost_toolset: msvc
+            analyzer_path: "C:/Program Files (x86)/PVS-Studio/CompilerCommandsAnalyzer.exe"
         exclude:
           - os: windows-latest
             c_compiler: clang
@@ -72,6 +73,20 @@ jobs:
             boost_install_dir: ${{ matrix.boost_install_dir }}
             platform_version: ${{ matrix.boost_platform_version }}
             toolset: ${{ matrix.boost_toolset }}
+
+      - name: Choco install tools
+        uses: crazy-max/ghaction-chocolatey@v3
+        with: 
+          args: install pvs-studio
+
+      # bad way
+      - name: PVS-license
+        env:
+          PVS_NAME: ${{ secrets.PVS_STUDIO_NAME }}
+          PVS_KEY: ${{ secrets.PVS_STUDIO_KEY }}
+        shell: pwsh
+        run: |
+          Start-Process -FilePath "${{ matrix.config.analyzer_path }}" -NoNewWindow -Wait -ArgumentList "credentials", "$env:PVS_NAME", "$env:PVS_KEY"
 
       - name: Configure CMake
         env:
